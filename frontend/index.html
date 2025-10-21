@@ -11,31 +11,51 @@
 
       <div class="contenido">
         <h1>Gestión de Proyectos</h1>
-        <form @submit.prevent="create">
-          <input v-model="form.nombre" placeholder="Nombre" required />
-          <input v-model="form.descripcion" placeholder="Descripción" />
-          <select v-model="form.estado">
-            <option>En progreso</option>
-            <option>Finalizado</option>
-          </select>
+        <button @click="abrirModalCrear" class="boton-principal">
+          Nuevo Proyecto
+        </button>
 
-          <input
-            type="date"
-            v-model="form.fechaInicio"
-            placeholder="Fecha inicio"
-          />
-          <input type="date" v-model="form.fechaFin" placeholder="Fecha fin" />
+        <!-- Modal -->
+        <div v-if="mostrarModal" class="modal-overlay">
+          <div class="modal">
+            <h2>{{ editingId ? "Actualizar Proyecto" : "Crear Proyecto" }}</h2>
 
-          <button
-            type="submit"
-            @click.prevent="editingId ? update() : create()"
-          >
-            {{ editingId ? "Actualizar" : "Crear" }}
-          </button>
-        </form>
+            <form @submit.prevent="editingId ? update() : create()">
+              <input v-model="form.nombre" placeholder="Nombre" required />
+              <input v-model="form.descripcion" placeholder="Descripción" />
+              <select v-model="form.estado">
+                <option>En progreso</option>
+                <option>Finalizado</option>
+              </select>
+
+              <input
+                type="date"
+                v-model="form.fechaInicio"
+                placeholder="Fecha inicio" />
+              <input
+                type="date"
+                v-model="form.fechaFin"
+                placeholder="Fecha fin" />
+
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  margin-top: 15px;
+                ">
+                <button type="button" @click="cerrarModal" class="btn-cancelar">
+                  Cancelar
+                </button>
+                <button type="submit" class="btn-accion">
+                  {{ editingId ? "Actualizar" : "Crear" }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
 
         <div class="tabla-container">
-          <table style="border: #333;">
+          <table style="border: #333">
             <tr>
               <th>Nombre</th>
               <th>Descripción</th>
@@ -71,21 +91,18 @@
             justify-content: center;
             gap: 30px;
             margin-top: 20px;
-          "
-        >
+          ">
           <div
             v-if="proyectos.length > 0"
             class="chart-container"
-            style="flex: 1 1 250px; text-align: center"
-          >
+            style="flex: 1 1 250px; text-align: center">
             <h3>Gráfico</h3>
             <canvas id="chart"></canvas>
           </div>
 
           <div
             v-if="resumen"
-            style="flex: 1 1 250px; margin-top: 40px; text-align: center"
-          >
+            style="flex: 1 1 250px; margin: auto; text-align: center">
             <h3>Resumen IA</h3>
             <pre class="resumen">{{ resumen }}</pre>
           </div>
@@ -103,8 +120,7 @@
 
       createApp({
         setup() {
-          const apiBase =
-            location.hostname === "localhost" ? "http://localhost:3000" : "";
+          const apiBase = location.hostname === "localhost" ? "http://localhost:3000" : "";
 
           const proyectos = ref([]);
           const form = reactive({
@@ -112,15 +128,23 @@
             descripcion: "",
             estado: "En progreso",
           });
-          const resumen = ref("");
-          let chartInstance = null;
 
-          const editingId = ref(null); // <-- nuevo
+          let chartInstance = null;
+          const resumen = ref("");
+          const mostrarModal = ref(false);
+          const editingId = ref(null);
+
+          const abrirModalCrear = () => {
+            resetForm();
+            mostrarModal.value = true;
+          };
+          const cerrarModal = () => {
+            mostrarModal.value = false;
+          };
 
           const fetch = async () => {
             try {
               const r = await axios.get(apiBase + "/proyectos");
-              // Ordenar por id ascendente
               proyectos.value = r.data.sort((a, b) => a.id - b.id);
               updateChart();
               getResumen();
@@ -131,70 +155,37 @@
 
           const create = async () => {
             try {
-              // Sumar un día a las fechas si existen
-              const payload = {
+              await axios.post(apiBase + "/proyectos", {
                 ...form,
-                fechaInicio: form.fechaInicio
-                  ? new Date(form.fechaInicio).setDate(
-                      new Date(form.fechaInicio).getDate() + 1
-                    )
-                  : null,
-                fechaFin: form.fechaFin
-                  ? new Date(form.fechaFin).setDate(
-                      new Date(form.fechaFin).getDate() + 1
-                    )
-                  : null,
-              };
-
-              await axios.post(apiBase + "/proyectos", payload);
+                fechaInicio: form.fechaInicio ? new Date(form.fechaInicio).setDate(new Date(form.fechaInicio).getDate() + 1) : null,
+                fechaFin: form.fechaFin ? new Date(form.fechaFin).setDate(new Date(form.fechaFin).getDate() + 1) : null,
+              });
               resetForm();
               await fetch();
+              cerrarModal()
             } catch (e) {
-              console.error("Error al crear proyecto:", e);
+              console.error(e);
             }
           };
 
           const update = async () => {
             if (!editingId.value) return;
             try {
-              // Clonar form y sumar un día a las fechas si existen
-              const payload = {
+              const r = await axios.put(apiBase + "/proyectos/" + editingId.value, {
                 ...form,
-                fechaInicio: form.fechaInicio
-                  ? new Date(
-                      new Date(form.fechaInicio).setDate(
-                        new Date(form.fechaInicio).getDate() + 1
-                      )
-                    )
-                  : null,
-                fechaFin: form.fechaFin
-                  ? new Date(
-                      new Date(form.fechaFin).setDate(
-                        new Date(form.fechaFin).getDate() + 1
-                      )
-                    )
-                  : null,
-              };
+                fechaInicio: form.fechaInicio ? new Date(form.fechaInicio).setDate(new Date(form.fechaInicio).getDate() + 1) : null,
+                fechaFin: form.fechaFin ? new Date(form.fechaFin).setDate(new Date(form.fechaFin).getDate() + 1) : null,
+              });
 
-              const r = await axios.put(
-                apiBase + "/proyectos/" + editingId.value,
-                payload
-              );
-
-              // Actualizar solo el proyecto en la lista
-              const index = proyectos.value.findIndex(
-                (p) => p.id === editingId.value
-              );
-              if (index !== -1) {
-                proyectos.value[index] = r.data; // reemplaza con el proyecto actualizado
-              }
+              // Actualizar proyecto en la lista
+              const index = proyectos.value.findIndex(p => p.id === editingId.value);
+              if (index !== -1) proyectos.value[index] = r.data;
 
               resetForm();
-
-              // 🔹 actualizar gráfico
               updateChart();
+              cerrarModal()
             } catch (e) {
-              console.error("Error al actualizar proyecto:", e);
+              console.error(e);
             }
           };
 
@@ -202,26 +193,19 @@
             form.nombre = p.nombre;
             form.descripcion = p.descripcion;
             form.estado = p.estado;
-            // Convertir fechas a formato YYYY-MM-DD y restar un día
-            form.fechaInicio = p.fechaInicio
-              ? new Date(
-                  new Date(p.fechaInicio).setDate(
-                    new Date(p.fechaInicio).getDate() - 1
-                  )
-                )
-                  .toISOString()
-                  .split("T")[0]
-              : "";
-            form.fechaFin = p.fechaFin
-              ? new Date(
-                  new Date(p.fechaFin).setDate(
-                    new Date(p.fechaFin).getDate() - 1
-                  )
-                )
-                  .toISOString()
-                  .split("T")[0]
-              : "";
+
+            const formatDate = (fecha) => {
+              if (!fecha) return "";
+              const d = new Date(fecha);
+              d.setDate(d.getDate() - 1);
+              return d.toISOString().split("T")[0];
+            };
+
+            form.fechaInicio = formatDate(p.fechaInicio);
+            form.fechaFin = formatDate(p.fechaFin);
+
             editingId.value = p.id;
+            mostrarModal.value = true;
           };
 
           const borrar = async (id) => {
@@ -295,47 +279,49 @@
             edit,
             borrar,
             editingId,
+            mostrarModal,
+            abrirModalCrear,
+            cerrarModal,
           };
         },
       }).mount("#app");
     </script>
     <style>
       body {
-        background-color: #545253; /* gris claro */
-        color: #333333; /* color del texto */
+        background-color: #545253;
+        color: #333333;
         font-family: Arial, sans-serif;
         margin: 0;
-        display: flex; /* activa flexbox */
-        flex-direction: column; /* organiza los hijos en columna */
-        justify-content: center; /* centra verticalmente */
-        align-items: center; /* centra horizontalmente */
-        min-height: 100vh; /* ocupa toda la altura de la ventana */
-        text-align: center; /* centra texto dentro de los elementos */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        text-align: center;
       }
 
       #app {
-        width: 90%; /* opcional: limita ancho del contenido */
-        max-width: 600px; /* opcional: ancho máximo */
+        width: 90%;
+        max-width: 800px;
       }
 
       canvas {
-        margin-top: 20px; /* un poco de espacio arriba del gráfico */
+        margin-top: 20px;
       }
 
       .tabla-container {
-        max-height: 200px; /* altura máxima */
-        overflow: auto; /* scroll vertical si se excede */
-        margin: 0 auto; /* centra horizontalmente */
-        width: 80%; /* coincide con el ancho de la tabla */
+        max-height: 200px;
+        overflow: auto;
+        margin: 0 auto;
+        width: 80%;
         margin-top: 30px;
-        border-radius: 8px; /* esquinas redondeadas */
-        background-color: #fff; /* fondo blanco para contraste */
+        border-radius: 8px;
+        background-color: #fff;
       }
 
-      /* Estilos previos de tu tabla */
       table {
         border-collapse: collapse;
-        width: 100%; /* ajusta al contenedor */
+        width: 100%;
         text-align: center;
       }
 
@@ -356,39 +342,156 @@
 
       .chart-container {
         display: flex;
-        flex-direction: column; /* para que el h2 quede arriba del canvas */
-        align-items: center; /* centra horizontalmente todo dentro del div */
+        flex-direction: column;
+        align-items: center;         
         margin: 0px 0;
       }
 
       #chart {
         margin-top: -10px;
-        max-width: 200px; /* opcional: limitar ancho */
-        max-height: 200px; /* opcional: limitar alto */
+        max-width: 200px;
+        max-height: 200px;
       }
 
       .resumen {
-        max-width: 600px; /* ancho máximo */
-        width: 100%; /* ocupa todo el ancho disponible hasta 100px */
-        overflow-wrap: break-word; /* rompe palabras largas para no desbordar */
+        max-width: 600px;
+        overflow-wrap: break-word;
         word-wrap: break-word;
-        white-space: pre-wrap; /* mantiene saltos de línea */
-        margin: 0 auto; /* centra horizontalmente */
-        text-align: center; /* opcional: texto alineado a la izquierda */
+        white-space: pre-wrap;
+        margin: 0 auto;
+        text-align: center;
       }
 
       #linea {
         height: 2px;
         width: 100%;
-        background-color: #333; /* color de la línea */
+        background-color: #333;
         margin: 20px 0;
       }
 
       .contenido {
-        border: 2px solid #333; /* borde alrededor de todo */
+        border: 2px solid #333;
         padding: 20px;
-        border-radius: 10px; /* opcional: bordes redondeados */
-        background-color: #fff; /* opcional: fondo blanco para destacar */
+        border-radius: 10px;
+        background-color: #fff;
+      }
+
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin: 20px auto;
+        max-width: 400px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      input,
+      select {
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s ease;
+      }
+
+      input:focus,
+      select:focus {
+        border-color: #90be6d;
+      }
+
+      button {
+        background-color: #90be6d;
+        color: white;
+        border: none;
+        padding: 10px;
+        border-radius: 6px;
+        font-size: 15px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+      }
+
+      button:hover {
+        background-color: #74a155;
+      }
+
+      .boton-principal {
+        background-color: #90be6d;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        font-size: 15px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin-bottom: 20px;
+        transition: background-color 0.2s ease;
+      }
+
+      .boton-principal:hover {
+        background-color: #74a155;
+      }
+
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .modal {
+        background: #fff;
+        padding: 25px;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 400px;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+        text-align: center;
+      }
+
+      .modal form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .modal input,
+      .modal select {
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+
+      .modal input:focus,
+      .modal select:focus {
+        border-color: #90be6d;
+        outline: none;
+      }
+
+      .btn-cancelar {
+        background-color: #ccc;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      .btn-accion {
+        background-color: #90be6d;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
       }
     </style>
   </body>

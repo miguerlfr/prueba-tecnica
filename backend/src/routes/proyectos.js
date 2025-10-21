@@ -40,12 +40,37 @@ router.get('/:id', async (req,res)=>{
  * @openapi
  * /proyectos:
  *   post:
- *     summary: Crear proyecto
+ *     summary: Crear un nuevo proyecto
  *     requestBody:
  *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nombre:
+ *                 type: string
+ *                 example: Proyecto 1
+ *               descripcion:
+ *                 type: string
+ *                 example: Descripción del proyecto
+ *               estado:
+ *                 type: string
+ *                 enum: [En progreso, Finalizado]
+ *                 example: En progreso
+ *               fechaInicio:
+ *                 type: string
+ *                 format: date
+ *                 example: 2025-10-20
+ *               fechaFin:
+ *                 type: string
+ *                 format: date
+ *                 example: 2025-12-20
  *     responses:
  *       201:
- *         description: Creado
+ *         description: Proyecto creado exitosamente
+ *       400:
+ *         description: Error al crear proyecto
  */
 router.post('/', async (req,res)=>{
   try{
@@ -60,7 +85,39 @@ router.post('/', async (req,res)=>{
  * @openapi
  * /proyectos/{id}:
  *   put:
- *     summary: Actualizar proyecto
+ *     summary: Actualizar un proyecto existente
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID del proyecto a actualizar
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nombre:
+ *                 type: string
+ *               descripcion:
+ *                 type: string
+ *               estado:
+ *                 type: string
+ *                 enum: [En progreso, Finalizado]
+ *               fechaInicio:
+ *                 type: string
+ *                 format: date
+ *               fechaFin:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: Proyecto actualizado exitosamente
+ *       404:
+ *         description: Proyecto no encontrado
  */
 router.put('/:id', async (req,res)=>{
   const p = await Proyecto.findByPk(req.params.id);
@@ -73,7 +130,19 @@ router.put('/:id', async (req,res)=>{
  * @openapi
  * /proyectos/{id}:
  *   delete:
- *     summary: Eliminar proyecto
+ *     summary: Eliminar un proyecto
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID del proyecto a eliminar
+ *     responses:
+ *       200:
+ *         description: Proyecto eliminado correctamente
+ *       404:
+ *         description: Proyecto no encontrado
  */
 router.delete('/:id', async (req,res)=>{
   const p = await Proyecto.findByPk(req.params.id);
