@@ -16,7 +16,7 @@
         </button>
 
         <!-- Modal -->
-        <div v-if="mostrarModal" class="modal-overlay">
+        <div v-if="mostrarModal" class="modal-overlay" @click.self="cerrarModal">
           <div class="modal">
             <h2>{{ editingId ? "Actualizar Proyecto" : "Crear Proyecto" }}</h2>
 
