@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Glocation - Test</title>
+  </head>
+  <body>
+    <div id="app">
+      <div class="linea"></div>
+
+      <div class="contenido">
+        <h1>Gestión de Proyectos</h1>
+        <form @submit.prevent="create">
+          <input v-model="form.nombre" placeholder="Nombre" required />
+          <input v-model="form.descripcion" placeholder="Descripción" />
+          <select v-model="form.estado">
+            <option>En progreso</option>
+            <option>Finalizado</option>
+          </select>
+
+          <input
+            type="date"
+            v-model="form.fechaInicio"
+            placeholder="Fecha inicio"
+          />
+          <input type="date" v-model="form.fechaFin" placeholder="Fecha fin" />
+
+          <button
+            type="submit"
+            @click.prevent="editingId ? update() : create()"
+          >
+            {{ editingId ? "Actualizar" : "Crear" }}
+          </button>
+        </form>
+
+        <div class="tabla-container">
+          <table style="border: #333;">
+            <tr>
+              <th>Nombre</th>
+              <th>Descripción</th>
+              <th>Estado</th>
+              <th>Fecha Inicio</th>
+              <th>Fecha Fin</th>
+              <th>Acciones</th>
+            </tr>
+            <tr v-for="p in proyectos" :key="p.id">
+              <td>{{ p.nombre }}</td>
+              <td>{{ p.descripcion }}</td>
+              <td>{{ p.estado }}</td>
+              <td>
+                {{ p.fechaInicio ? new Date(p.fechaInicio).toLocaleDateString()
+                : '' }}
+              </td>
+              <td>
+                {{ p.fechaFin ? new Date(p.fechaFin).toLocaleDateString() : ''
+                }}
+              </td>
+              <td>
+                <button @click="edit(p)">Editar</button>
+                <button @click="borrar(p.id)">Borrar</button>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <div
+          style="
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+          "
+        >
+          <div
+            v-if="proyectos.length > 0"
+            class="chart-container"
+            style="flex: 1 1 250px; text-align: center"
+          >
+            <h3>Gráfico</h3>
+            <canvas id="chart"></canvas>
+          </div>
+
+          <div
+            v-if="resumen"
+            style="flex: 1 1 250px; margin-top: 40px; text-align: center"
+          >
+            <h3>Resumen IA</h3>
+            <pre class="resumen">{{ resumen }}</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="linea"></div>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+      const { createApp, ref, reactive, onMounted } = Vue;
+
+      createApp({
+        setup() {
+          const apiBase =
+            location.hostname === "localhost" ? "http://localhost:3000" : "";
+
+          const proyectos = ref([]);
+          const form = reactive({
+            nombre: "",
+            descripcion: "",
+            estado: "En progreso",
+          });
+          const resumen = ref("");
+          let chartInstance = null;
+
+          const editingId = ref(null); // <-- nuevo
+
+          const fetch = async () => {
+            try {
+              const r = await axios.get(apiBase + "/proyectos");
+              // Ordenar por id ascendente
+              proyectos.value = r.data.sort((a, b) => a.id - b.id);
+              updateChart();
+              getResumen();
+            } catch (e) {
+              console.error("Error al obtener proyectos:", e);
+            }
+          };
+
+          const create = async () => {
+            try {
+              // Sumar un día a las fechas si existen
+              const payload = {
+                ...form,
+                fechaInicio: form.fechaInicio
+                  ? new Date(form.fechaInicio).setDate(
+                      new Date(form.fechaInicio).getDate() + 1
+                    )
+                  : null,
+                fechaFin: form.fechaFin
+                  ? new Date(form.fechaFin).setDate(
+                      new Date(form.fechaFin).getDate() + 1
+                    )
+                  : null,
+              };
+
+              await axios.post(apiBase + "/proyectos", payload);
+              resetForm();
+              await fetch();
+            } catch (e) {
+              console.error("Error al crear proyecto:", e);
+            }
+          };
+
+          const update = async () => {
+            if (!editingId.value) return;
+            try {
+              // Clonar form y sumar un día a las fechas si existen
+              const payload = {
+                ...form,
+                fechaInicio: form.fechaInicio
+                  ? new Date(
+                      new Date(form.fechaInicio).setDate(
+                        new Date(form.fechaInicio).getDate() + 1
+                      )
+                    )
+                  : null,
+                fechaFin: form.fechaFin
+                  ? new Date(
+                      new Date(form.fechaFin).setDate(
+                        new Date(form.fechaFin).getDate() + 1
+                      )
+                    )
+                  : null,
+              };
+
+              const r = await axios.put(
+                apiBase + "/proyectos/" + editingId.value,
+                payload
+              );
+
+              // Actualizar solo el proyecto en la lista
+              const index = proyectos.value.findIndex(
+                (p) => p.id === editingId.value
+              );
+              if (index !== -1) {
+                proyectos.value[index] = r.data; // reemplaza con el proyecto actualizado
+              }
+
+              resetForm();
+
+              // 🔹 actualizar gráfico
+              updateChart();
+            } catch (e) {
+              console.error("Error al actualizar proyecto:", e);
+            }
+          };
+
+          const edit = (p) => {
+            form.nombre = p.nombre;
+            form.descripcion = p.descripcion;
+            form.estado = p.estado;
+            // Convertir fechas a formato YYYY-MM-DD y restar un día
+            form.fechaInicio = p.fechaInicio
+              ? new Date(
+                  new Date(p.fechaInicio).setDate(
+                    new Date(p.fechaInicio).getDate() - 1
+                  )
+                )
+                  .toISOString()
+                  .split("T")[0]
+              : "";
+            form.fechaFin = p.fechaFin
+              ? new Date(
+                  new Date(p.fechaFin).setDate(
+                    new Date(p.fechaFin).getDate() - 1
+                  )
+                )
+                  .toISOString()
+                  .split("T")[0]
+              : "";
+            editingId.value = p.id;
+          };
+
+          const borrar = async (id) => {
+            try {
+              await axios.delete(apiBase + "/proyectos/" + id);
+              await fetch();
+            } catch (e) {
+              console.error("Error al borrar proyecto:", e);
+            }
+          };
+
+          const getResumen = async () => {
+            try {
+              const r = await axios.post(apiBase + "/proyectos/analisis");
+              resumen.value =
+                r.data.resumen ||
+                r.data.sampleResumen ||
+                JSON.stringify(r.data);
+            } catch (e) {
+              console.error("Error al obtener resumen:", e);
+            }
+          };
+
+          const updateChart = async () => {
+            try {
+              const r = await axios.get(
+                apiBase + "/proyectos/graficos/estadisticas"
+              );
+              if (!r.data.length) return;
+
+              const labels = r.data.map((x) => x.estado);
+              const data = r.data.map((x) => +x.cantidad);
+              const colors = ["#a8dadc", "#90be6d"];
+
+              const ctx = document.getElementById("chart")?.getContext("2d");
+              if (!ctx) return;
+
+              if (chartInstance) chartInstance.destroy();
+              chartInstance = new Chart(ctx, {
+                type: "pie",
+                data: { labels, datasets: [{ data, backgroundColor: colors }] },
+                options: {
+                  responsive: true,
+                  plugins: { legend: { position: "bottom" } },
+                },
+              });
+            } catch (e) {
+              console.error("Error al actualizar gráfico:", e);
+            }
+          };
+
+          const resetForm = () => {
+            form.nombre = "";
+            form.descripcion = "";
+            form.estado = "En progreso";
+            form.fechaInicio = "";
+            form.fechaFin = "";
+            editingId.value = null;
+          };
+
+          onMounted(() => {
+            fetch();
+          });
+
+          return {
+            proyectos,
+            form,
+            resumen,
+            create,
+            update,
+            edit,
+            borrar,
+            editingId,
+          };
+        },
+      }).mount("#app");
+    </script>
+    <style>
+      body {
+        background-color: #545253; /* gris claro */
+        color: #333333; /* color del texto */
+        font-family: Arial, sans-serif;
+        margin: 0;
+        display: flex; /* activa flexbox */
+        flex-direction: column; /* organiza los hijos en columna */
+        justify-content: center; /* centra verticalmente */
+        align-items: center; /* centra horizontalmente */
+        min-height: 100vh; /* ocupa toda la altura de la ventana */
+        text-align: center; /* centra texto dentro de los elementos */
+      }
+
+      #app {
+        width: 90%; /* opcional: limita ancho del contenido */
+        max-width: 600px; /* opcional: ancho máximo */
+      }
+
+      canvas {
+        margin-top: 20px; /* un poco de espacio arriba del gráfico */
+      }
+
+      .tabla-container {
+        max-height: 200px; /* altura máxima */
+        overflow: auto; /* scroll vertical si se excede */
+        margin: 0 auto; /* centra horizontalmente */
+        width: 80%; /* coincide con el ancho de la tabla */
+        margin-top: 30px;
+        border-radius: 8px; /* esquinas redondeadas */
+        background-color: #fff; /* fondo blanco para contraste */
+      }
+
+      /* Estilos previos de tu tabla */
+      table {
+        border-collapse: collapse;
+        width: 100%; /* ajusta al contenedor */
+        text-align: center;
+      }
+
+      th,
+      td {
+        padding: 10px;
+        border: 1px solid #333;
+      }
+
+      th {
+        background-color: #90be6d;
+      }
+
+      button {
+        margin: 0 5px;
+        padding: 5px 10px;
+      }
+
+      .chart-container {
+        display: flex;
+        flex-direction: column; /* para que el h2 quede arriba del canvas */
+        align-items: center; /* centra horizontalmente todo dentro del div */
+        margin: 0px 0;
+      }
+
+      #chart {
+        margin-top: -10px;
+        max-width: 200px; /* opcional: limitar ancho */
+        max-height: 200px; /* opcional: limitar alto */
+      }
+
+      .resumen {
+        max-width: 600px; /* ancho máximo */
+        width: 100%; /* ocupa todo el ancho disponible hasta 100px */
+        overflow-wrap: break-word; /* rompe palabras largas para no desbordar */
+        word-wrap: break-word;
+        white-space: pre-wrap; /* mantiene saltos de línea */
+        margin: 0 auto; /* centra horizontalmente */
+        text-align: center; /* opcional: texto alineado a la izquierda */
+      }
+
+      #linea {
+        height: 2px;
+        width: 100%;
+        background-color: #333; /* color de la línea */
+        margin: 20px 0;
+      }
+
+      .contenido {
+        border: 2px solid #333; /* borde alrededor de todo */
+        padding: 20px;
+        border-radius: 10px; /* opcional: bordes redondeados */
+        background-color: #fff; /* opcional: fondo blanco para destacar */
+      }
+    </style>
+  </body>
+</html>
